@@ -1,0 +1,27 @@
+{
+    "manifest_version": 3,
+    "name": "AI Smart Autocomplete",
+    "version": "1.0",
+    "description": "Fast AI-powered autocomplete using Gemini Nano",
+    "permissions": [
+      "activeTab",
+      "scripting",
+      "storage"
+    ],
+    "host_permissions": [
+      "<all_urls>"
+    ],
+    "content_scripts": [{
+      "matches": ["<all_urls>"],
+      "js": [
+        "src/utils/debounce.js",
+        "src/models/geminiNano.js",
+        "src/content/ghostText.js",
+        "src/content/content.js"
+      ],
+      "css": ["styles/styles.css"]
+    }],
+    "icons": {
+      "128": "assets/icons/icon.png"
+    }
+  }
