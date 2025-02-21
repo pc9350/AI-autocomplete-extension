@@ -30,7 +30,17 @@ class GeminiNano {
 
       this.currentRequest = new AbortController();
 
-      const prompt = `You are an English language autocomplete system. Complete this text naturally with 7-9 words or 1-2 sentences wherever necessary but in English only. it doesn't need to be a story or information available directly on the web. Respond with ONLY the completion:
+      const prompt = `You are an advanced English autocomplete assistant. Your task is to continue the text provided in a natural, coherent, and contextually appropriate manner. Follow these guidelines:
+                      - Do not repeat any part of the input text.
+                      - Generate a continuation that builds on the given text and adds new, meaningful content.
+                      - Your completion should be concise—either around 7 to 9 words or 1 to 2 complete sentences.
+                      - Do not include any commentary, explanations, or extra text; return only the continuation.
+                      - Ensure the completion flows logically from the input.
+                      - if the previous text ends with a sentence, start the continuation with a new sentence.
+                      - if the previous text ends with a word, start the continuation with a new word.
+                      - if the previous text ends with a phrase, start the continuation with a new phrase.
+                      - if the previous text ends with a paragraph, start the continuation with a new paragraph.
+                      - MAKE SURE NOT TO REPEAT ANY PART OF THE INPUT TEXT.
           TEXT: "${context.text}"
           CONTINUATION:`;
 
@@ -41,13 +51,12 @@ class GeminiNano {
         ),
       ]);
 
-      // Clean up the response to ensure it's a proper continuation
-      const cleanResponse = response
-        ?.trim()
-        ?.replace(/^["']|["']$/g, "") // Remove quotes
-        ?.replace(context.text, "") // Remove any repeated input
-        ?.replace(/[^\x00-\x7F]/g, ""); // Remove any repeated input
+      console.log("Raw response from model:", response);
 
+      // Clean up the response to ensure it's a proper continuation
+      const cleanResponse = response?.trim()?.replace(/^["']|["']$/g, "");
+      
+      console.log("clean response", cleanResponse);
       return cleanResponse || null;
     } catch (error) {
       if (error.message?.includes("untested language")) {
