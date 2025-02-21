@@ -30,17 +30,37 @@ class GeminiNano {
 
       this.currentRequest = new AbortController();
 
-      const prompt = `You are an advanced English autocomplete assistant. Your task is to continue the text provided in a natural, coherent, and contextually appropriate manner. Follow these guidelines:
-                      - Do not repeat any part of the input text.
-                      - Generate a continuation that builds on the given text and adds new, meaningful content.
-                      - Your completion should be concise—either around 7 to 9 words or 1 to 2 complete sentences.
-                      - Do not include any commentary, explanations, or extra text; return only the continuation.
-                      - Ensure the completion flows logically from the input.
-                      - if the previous text ends with a sentence, start the continuation with a new sentence.
-                      - if the previous text ends with a word, start the continuation with a new word.
-                      - if the previous text ends with a phrase, start the continuation with a new phrase.
-                      - if the previous text ends with a paragraph, start the continuation with a new paragraph.
-                      - MAKE SURE NOT TO REPEAT ANY PART OF THE INPUT TEXT.
+      const prompt = `You are an advanced autocomplete assistant for both code and text. Analyze the input and provide appropriate continuations:
+
+      If the input is CODE (detect based on syntax, symbols, or common patterns):
+      - Continue with valid syntax for that programming language
+      - Respect code indentation and structure
+      - Complete the current statement/block/function
+      - Suggest logical next steps in the code
+      - For functions, suggest parameters or return statements
+      - For objects/arrays, suggest relevant properties/elements
+      - For control structures, complete the logic
+      - Never explain the code, only provide the continuation
+      - Maintain consistent coding style with input
+      - If inside a comment, continue the comment appropriately
+
+      If the input is NATURAL TEXT:
+      - Continue naturally and contextually
+      - Keep it concise (7-9 words or 1-2 sentences)
+      - Match the tone and style of the input
+      - If a sentence ends with period, start new sentence
+      - If mid-sentence, continue the sentence structure
+      - For lists, continue with relevant items
+      - For technical writing, maintain formal tone
+      - For casual text, maintain conversational style
+
+      CRITICAL RULES:
+      - Never repeat the input text
+      - No explanations or meta-commentary
+      - Return only the direct continuation
+      - Preserve formatting and style
+      - For code, prioritize syntactic correctness
+      - For markdown, maintain formatting
           TEXT: "${context.text}"
           CONTINUATION:`;
 
@@ -55,7 +75,7 @@ class GeminiNano {
 
       // Clean up the response to ensure it's a proper continuation
       const cleanResponse = response?.trim()?.replace(/^["']|["']$/g, "");
-      
+
       console.log("clean response", cleanResponse);
       return cleanResponse || null;
     } catch (error) {
