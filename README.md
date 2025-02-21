@@ -1,20 +1,23 @@
 # AI Smart Autocomplete Extension
 
 ## Overview
-A Chrome extension that provides real-time AI-powered text suggestions using Gemini Nano. The extension works across various text input fields including regular textboxes, rich text editors, Gmail compose, and Google Docs (work in progress).
+A Chrome extension that provides real-time AI-powered text suggestions using Gemini Nano. The extension works across various text input fields including regular textboxes, rich text editors, and Gmail compose. Google Docs support is currently under development.
 
 ## Current Features
 - Real-time text suggestions as you type
-- Works in most text input fields
-- Ghost text UI showing suggestions
-- Tab key to accept suggestions
-- Escape key to dismiss suggestions
-- Debounced input handling for performance
-- Support for:
+- Works in:
   - Regular input fields
   - Textareas
   - Contenteditable divs
-  - Gmail compose (partial support)
+  - Rich text editors (ProseMirror, CodeMirror, Monaco, etc.)
+  - Gmail compose
+- Consistent ghost text UI showing suggestions
+  - Gray, italic text for suggestions
+  - Proper positioning across different editors
+  - Maintains original font styles
+- Tab key to accept suggestions
+- Escape key to dismiss suggestions
+- Debounced input handling for performance
 
 ## Project Structure
 
@@ -32,37 +35,29 @@ ai-autocomplete-extension/
 └── styles.css # Ghost text styling
 
 
+
 ## Known Issues & TODOs
 
 ### Google Docs Integration
-- Current implementation doesn't fully work with Google Docs' canvas-based editor
-- Need to improve text extraction and cursor position detection
-- Requires special handling for the canvas-based rendering
+- Currently not working due to canvas-based editor
+- Need to implement special handling for canvas text extraction
+- Requires different approach for cursor position detection
 
-### Gmail Compose
-- Tab key sometimes navigates to other elements instead of accepting suggestions
-- Ghost text positioning needs improvement in complex layouts
-- Selection handling can be unreliable
-
-### General Improvements Needed
-1. Better position calculation for ghost text overlay
-2. More robust selection handling across different editors
-3. Improved suggestion relevance and context awareness
-4. Better error handling for selection and range issues
+### Minor Improvements Needed
+1. Fine-tune suggestion positioning in complex layouts
+2. Improve performance for rapid typing
+3. Add configuration options for suggestion style
+4. Better error handling for model responses
 
 ## Technical Details
 
 ### Key Components
 
-#### AutocompleteManager (content.js)
-- Handles input detection and event management
-- Sets up listeners for different types of editors
-- Manages suggestion requests and UI updates
-
-#### GhostText (ghostText.js)
-- Manages the suggestion overlay UI
-- Handles positioning and styling of suggestions
-- Manages text measurement and placement
+#### UniversalAutocomplete (content.js)
+- Main controller for the extension
+- Handles input detection across different editors
+- Manages suggestion display and acceptance
+- Special handling for different editor types
 
 #### GeminiNano (geminiNano.js)
 - Integrates with Gemini Nano AI model
@@ -70,46 +65,42 @@ ai-autocomplete-extension/
 - Manages suggestion timeouts and error handling
 
 ### Current Implementation Notes
-1. Uses MutationObserver for dynamic content
-2. Implements debouncing for performance
-3. Handles different text input types
-4. Uses custom positioning for ghost text
+1. Uses inline styles for consistent appearance
+2. Handles different input types uniformly
+3. Maintains original editor font styles
+4. Proper text measurement for positioning
 
 ## Setup and Development
 
 1. Clone the repository
 2. Load as unpacked extension in Chrome
 3. Enable developer mode in Chrome extensions
-4. Test in different contexts to verify functionality
+4. Test in different contexts
 
 ## Testing Priority Areas
 1. Google Docs integration
-2. Gmail compose functionality
-3. Rich text editor support
-4. Position calculation accuracy
-5. Selection handling reliability
+2. Complex editor layouts
+3. Performance optimization
+4. Error handling improvements
 
 ## Future Improvements
-1. Add support for more editor types
-2. Improve suggestion quality and relevance
-3. Add configuration options
-4. Implement better error handling
-5. Add support for different languages
-6. Improve performance and reduce latency
+1. Complete Google Docs support
+2. Add user configuration options
+3. Improve suggestion relevance
+4. Add support for different languages
+5. Optimize performance
 
 ## Contributing
-When working on this project, please focus on:
-1. Fixing Google Docs integration
-2. Improving Gmail compose support
-3. Making ghost text positioning more reliable
-4. Enhancing selection handling
-5. Adding better error recovery
+Current focus areas:
+1. Google Docs integration
+2. Performance optimization
+3. Error handling
+4. Configuration options
+5. Testing across different platforms
 
 ## Notes for Developers
-- Test thoroughly in different contexts
-- Watch for selection-related errors
-- Monitor performance impact
-- Consider edge cases in different editors
-- Keep the UI consistent across platforms
-
-This project is under active development and needs careful attention to editor-specific implementations and cross-platform compatibility.
+- Test in various text editors
+- Monitor performance with rapid typing
+- Check for memory leaks
+- Verify suggestion positioning
+- Test across different websites
