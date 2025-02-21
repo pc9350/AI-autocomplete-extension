@@ -4,6 +4,7 @@ class AutocompleteManager {
     this.ghostText = new window.GhostText();
     this.setupListeners();
     this.setupMutationObserver();
+    this.setupGoogleDocsListener();
     console.log("AutocompleteManager initialized");
   }
 
@@ -14,66 +15,148 @@ class AutocompleteManager {
   }
 
   setupGoogleDocsListener() {
-    // Check if we're in Google Docs
+    console.log("Checking for Google Docs...");
     if (window.location.hostname === "docs.google.com") {
-      console.log("Google Docs detected");
-
-      // Wait for the editor to be ready
-      const observer = new MutationObserver((mutations, obs) => {
-        const canvas = document.querySelector(".kix-canvas-tile-content");
-        if (canvas) {
-          console.log("Google Docs editor found");
-          obs.disconnect();
-          this.setupGoogleDocsHandlers();
-        }
-      });
-
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
+      console.log("✓ Google Docs detected");
+      this.waitForEditor();
     }
   }
 
+  waitForEditor(retries = 0, maxRetries = 10) {
+    console.log("Waiting for editor...", retries);
+
+    // Try multiple selectors
+    const editorSelectors = [
+      ".docs-editor-container",
+      "#docs-editor",
+      ".kix-appview-editor",
+    ];
+
+    const editor = editorSelectors
+      .map((selector) => document.querySelector(selector))
+      .find((el) => el);
+
+    if (editor) {
+      console.log("✓ Editor found");
+      this.setupGoogleDocsHandlers(editor);
+      return;
+    }
+
+    if (retries >= maxRetries) {
+      console.error("❌ Editor not found after maximum retries");
+      return;
+    }
+
+    // Retry with exponential backoff
+    setTimeout(() => {
+      this.waitForEditor(retries + 1, maxRetries);
+    }, Math.min(1000 * Math.pow(1.5, retries), 10000));
+  }
+
   setupGoogleDocsHandlers() {
-    // Listen for cursor changes
-    document.addEventListener(
-      "input",
-      this.debounce(() => {
-        const cursor = document.querySelector(".kix-cursor");
-        if (!cursor) return;
+    console.log("Setting up Google Docs handlers...");
 
-        // Get cursor position
-        const rect = cursor.getBoundingClientRect();
+    // Try multiple selectors for editor container
+    const editorSelectors = [
+      ".docs-editor-container",
+      "#docs-editor",
+      ".kix-appview-editor",
+    ];
 
-        // Get the text content around cursor
-        const textLayer = document.querySelector(".kix-paragraphrenderer");
-        if (!textLayer) return;
+    const editorContainer = editorSelectors
+      .map((selector) => document.querySelector(selector))
+      .find((el) => el);
 
-        const text = this.getGoogleDocsText();
-        if (!text) return;
+    if (!editorContainer) {
+      console.error("❌ Editor container not found");
+      return;
+    }
+    console.log("✓ Editor container found");
 
-        // Get suggestion based on text
+    // Input handler
+    const inputHandler = this.debounce((event) => {
+      console.log("Input detected in Google Docs");
+
+      // Ignore special keys
+      if (event.key === "Tab" || event.key === "Escape") {
+        return;
+      }
+
+      const cursor = document.querySelector(".kix-cursor");
+      if (!cursor) {
+        console.log("❌ No cursor found");
+        return;
+      }
+
+      const rect = cursor.getBoundingClientRect();
+      const text = this.getGoogleDocsText();
+
+      if (text) {
         this.handleGoogleDocsInput(text, rect);
-      }, 300)
-    );
+      }
+    }, 300);
+
+    // Keyboard handler
+    const keyboardHandler = (event) => {
+      if (event.key === "Tab" && this.ghostText.isVisible()) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.acceptSuggestion();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        this.ghostText.hide();
+      }
+    };
+
+    // Add event listeners
+    editorContainer.addEventListener("keyup", inputHandler);
+    editorContainer.addEventListener("input", inputHandler);
+    document.addEventListener("keydown", keyboardHandler, true);
+
+    // Store cleanup functions
+    this.cleanup = () => {
+      editorContainer.removeEventListener("keyup", inputHandler);
+      editorContainer.removeEventListener("input", inputHandler);
+      document.removeEventListener("keydown", keyboardHandler, true);
+    };
+
+    console.log("✓ Google Docs handlers setup complete");
   }
 
   getGoogleDocsText() {
-    // Try to get text from the current line
-    const cursor = document.querySelector(".kix-cursor");
-    if (!cursor) return null;
+    const lines = Array.from(document.querySelectorAll(".kix-lineview"));
+    if (!lines.length) return null;
 
-    // Find the line containing the cursor
-    const line = cursor.closest(".kix-lineview");
-    if (!line) return null;
+    const currentLine = lines.find((line) => {
+      const rect = line.getBoundingClientRect();
+      const cursor = document.querySelector(".kix-cursor");
+      return (
+        cursor &&
+        rect.top <= cursor.getBoundingClientRect().top &&
+        rect.bottom >= cursor.getBoundingClientRect().top
+      );
+    });
 
-    // Get text content
-    return line.textContent;
+    return currentLine ? currentLine.textContent : null;
+  }
+
+  acceptSuggestion() {
+    // Simulate text insertion in Google Docs
+    const suggestion = this.ghostText.getCurrentSuggestion();
+    if (suggestion) {
+      // Using document.execCommand for text insertion
+      document.execCommand("insertText", false, suggestion);
+      this.ghostText.hide();
+    }
   }
 
   async handleGoogleDocsInput(text, cursorRect) {
-    if (!text) return;
+    console.log("Handling Google Docs input...");
+
+    if (!text) {
+      console.log("❌ No text to process");
+      return;
+    }
 
     const context = {
       text: text,
@@ -82,9 +165,17 @@ class AutocompleteManager {
 
     try {
       const suggestion = await this.model.getSuggestion(context);
+      console.log("Got suggestion:", suggestion);
+
       if (suggestion) {
-        // Position ghost text at cursor position
-        this.ghostText.showAtPosition(cursorRect, suggestion);
+        // Adjust position for Google Docs
+        const adjustedRect = {
+          ...cursorRect,
+          right: cursorRect.right + 2, // Slight offset
+          top: cursorRect.top + 2,
+        };
+        this.ghostText.showAtPosition(adjustedRect, suggestion);
+        console.log("✓ Showing suggestion");
       } else {
         this.ghostText.hide();
       }
