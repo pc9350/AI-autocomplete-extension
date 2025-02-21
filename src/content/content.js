@@ -1,248 +1,265 @@
-class AutocompleteManager {
+class UniversalAutocomplete {
   constructor() {
     this.model = new window.GeminiNano();
-    this.ghostText = new window.GhostText();
+    this.suggestion = "";
+    this.ghostOverlay = null;
+    this.currentElement = null;
+    this.isGoogleDocs = window.location.hostname === "docs.google.com";
     this.setupListeners();
-    this.setupMutationObserver();
-    console.log("AutocompleteManager initialized");
+    if (this.isGoogleDocs) {
+      this.setupGoogleDocsListener();
+    }
+    console.log("UniversalAutocomplete initialized");
   }
 
+  // Global listeners for focus, input, and keydown
   setupListeners() {
-    // Listen for focus events on the whole document
-    document.addEventListener("focusin", this.handleFocusIn.bind(this));
-    document.addEventListener("keydown", this.handleKeydown.bind(this));
+    document.addEventListener("focusin", (e) => this.handleFocus(e));
+    if (!this.isGoogleDocs) {
+      document.addEventListener("input", (e) => this.handleInput(e));
+    }
+    document.addEventListener("keydown", (e) => this.handleKeydown(e));
   }
 
-  setupGoogleDocsListener() {
-    // Check if we're in Google Docs
-    if (window.location.hostname === "docs.google.com") {
-      console.log("Google Docs detected");
-
-      // Wait for the editor to be ready
-      const observer = new MutationObserver((mutations, obs) => {
-        const canvas = document.querySelector(".kix-canvas-tile-content");
-        if (canvas) {
-          console.log("Google Docs editor found");
-          obs.disconnect();
-          this.setupGoogleDocsHandlers();
-        }
-      });
-
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
+  handleFocus(event) {
+    const element = event.target;
+    if (this.isValidInput(element)) {
+      this.currentElement = element;
+      console.log("Focused on:", element.tagName);
     }
   }
 
-  setupGoogleDocsHandlers() {
-    // Listen for cursor changes
-    document.addEventListener(
-      "input",
-      this.debounce(() => {
-        const cursor = document.querySelector(".kix-cursor");
-        if (!cursor) return;
-
-        // Get cursor position
-        const rect = cursor.getBoundingClientRect();
-
-        // Get the text content around cursor
-        const textLayer = document.querySelector(".kix-paragraphrenderer");
-        if (!textLayer) return;
-
-        const text = this.getGoogleDocsText();
-        if (!text) return;
-
-        // Get suggestion based on text
-        this.handleGoogleDocsInput(text, rect);
-      }, 300)
-    );
-  }
-
-  getGoogleDocsText() {
-    // Try to get text from the current line
-    const cursor = document.querySelector(".kix-cursor");
-    if (!cursor) return null;
-
-    // Find the line containing the cursor
-    const line = cursor.closest(".kix-lineview");
-    if (!line) return null;
-
-    // Get text content
-    return line.textContent;
-  }
-
-  async handleGoogleDocsInput(text, cursorRect) {
-    if (!text) return;
-
-    const context = {
-      text: text,
-      cursorPosition: text.length,
-    };
-
-    try {
-      const suggestion = await this.model.getSuggestion(context);
-      if (suggestion) {
-        // Position ghost text at cursor position
-        this.ghostText.showAtPosition(cursorRect, suggestion);
-      } else {
-        this.ghostText.hide();
-      }
-    } catch (error) {
-      console.error("Autocomplete error:", error);
-      this.ghostText.hide();
+  async handleInput(event) {
+    const element = event.target;
+    if (!this.isValidInput(element)) return;
+    this.currentElement = element;
+    const text = this.getTextFromElement(element);
+    if (!text.trim()) {
+      this.clearGhostOverlay();
+      return;
     }
-  }
-
-  setupMutationObserver() {
-    // For Google Docs and similar dynamic editors
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        if (mutation.type === "childList") {
-          const addedNodes = Array.from(mutation.addedNodes);
-          for (const node of addedNodes) {
-            if (node.nodeType === 1) {
-              // Element node
-              this.setupEditorListeners(node);
-            }
-          }
-        }
-      }
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-    });
-  }
-
-  setupEditorListeners(node) {
-    // Check for Google Docs editor
-    const docsEditor = node.querySelector(".kix-appview-editor");
-    if (docsEditor) {
-      console.log("Found Google Docs editor");
-      docsEditor.addEventListener(
-        "input",
-        this.debounce(() => this.handleInput(docsEditor), 300)
-      );
-    }
-
-    // Check for Gmail compose
-    const gmailCompose = node.querySelector(".Am.Al.editable");
-    if (gmailCompose) {
-      console.log("Found Gmail compose");
-      gmailCompose.addEventListener(
-        "input",
-        this.debounce(() => this.handleInput(gmailCompose), 300)
-      );
+    const suggestion = await this.getSuggestion(text);
+    if (suggestion) {
+      this.suggestion = suggestion;
+      this.showGhostOverlay(element, suggestion);
+    } else {
+      this.clearGhostOverlay();
     }
   }
 
   handleKeydown(event) {
-    // Handle Tab key for accepting suggestions
-    if (event.key === "Tab" && this.ghostText.isVisible()) {
-      // Check if we're in Gmail
-      const isGmail =
-        event.target.classList.contains("Am") ||
-        event.target.classList.contains("Al") ||
-        event.target.classList.contains("editable");
-
-      if (isGmail) {
-        event.stopPropagation(); // Stop event from bubbling
-        event.preventDefault(); // Prevent default tab behavior
-        this.ghostText.accept();
-        return false;
-      } else {
-        event.preventDefault();
-        this.ghostText.accept();
-      }
+    if (event.key === "Tab" && this.suggestion) {
+      event.preventDefault();
+      this.acceptSuggestion();
     } else if (event.key === "Escape") {
-      this.ghostText.hide();
+      this.clearGhostOverlay();
+      this.suggestion = "";
     }
   }
 
-  handleFocusIn(event) {
-    const element = event.target;
-    if (this.isValidInput(element)) {
-      console.log("Valid input focused:", element.tagName);
-      element.addEventListener(
-        "input",
-        this.debounce(() => this.handleInput(element), 300)
-      );
+  async getSuggestion(text) {
+    try {
+      const context = { text: text, cursorPosition: text.length };
+      const response = await this.model.getSuggestion(context);
+      return response || "";
+    } catch (error) {
+      console.error("Autocomplete error:", error);
+      return "";
     }
   }
 
+  // Dispatch the ghost overlay display to the appropriate method
+  showGhostOverlay(element, suggestion) {
+    if (this.isGoogleDocs) {
+      this.showGoogleDocsGhostOverlay(suggestion);
+    } else {
+      this.showStandardGhostOverlay(element, suggestion);
+    }
+  }
+
+  // For standard text inputs and contentEditable elements
+  showStandardGhostOverlay(element, suggestion) {
+    this.clearGhostOverlay();
+    const overlay = document.createElement("div");
+    overlay.textContent = suggestion;
+    overlay.style.position = "absolute";
+    overlay.style.color = "gray";
+    overlay.style.opacity = "0.6";
+    overlay.style.fontStyle = "italic";
+    overlay.style.pointerEvents = "none";
+    overlay.style.zIndex = "1000";
+
+    let caretRect = null;
+    if (element.tagName === "INPUT" || element.tagName === "TEXTAREA") {
+      caretRect = this.getCaretCoordinates(element, element.selectionStart);
+    } else if (element.isContentEditable) {
+      const sel = window.getSelection();
+      if (sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0).cloneRange();
+        range.collapse(true);
+        caretRect = range.getBoundingClientRect();
+      }
+    }
+
+    if (caretRect) {
+      overlay.style.top = `${caretRect.top + window.scrollY}px`;
+      overlay.style.left = `${caretRect.left + window.scrollX}px`;
+    }
+    document.body.appendChild(overlay);
+    this.ghostOverlay = overlay;
+  }
+
+  // For Google Docs (canvas-based)
+  showGoogleDocsGhostOverlay(suggestion) {
+    this.clearGhostOverlay();
+    const cursor = document.querySelector(".kix-cursor");
+    if (!cursor) return;
+    const rect = cursor.getBoundingClientRect();
+    const overlay = document.createElement("div");
+    overlay.textContent = suggestion;
+    overlay.style.position = "absolute";
+    overlay.style.color = "gray";
+    overlay.style.opacity = "0.6";
+    overlay.style.fontStyle = "italic";
+    overlay.style.pointerEvents = "none";
+    overlay.style.zIndex = "10000";
+    overlay.style.top = `${rect.top + window.scrollY}px`;
+    overlay.style.left = `${rect.left + window.scrollX}px`;
+    document.body.appendChild(overlay);
+    this.ghostOverlay = overlay;
+  }
+
+  // When Tab is pressed, accept the suggestion
+  acceptSuggestion() {
+    if (!this.suggestion) return;
+    if (!this.isGoogleDocs && this.currentElement) {
+      const element = this.currentElement;
+      if (element.tagName === "INPUT" || element.tagName === "TEXTAREA") {
+        const pos = element.selectionStart;
+        const before = element.value.substring(0, pos);
+        const after = element.value.substring(pos);
+        element.value = before + this.suggestion + after;
+        const newPos = pos + this.suggestion.length;
+        element.setSelectionRange(newPos, newPos);
+      } else if (element.isContentEditable) {
+        const sel = window.getSelection();
+        if (sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          const textNode = document.createTextNode(this.suggestion);
+          range.insertNode(textNode);
+          range.setStartAfter(textNode);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      }
+    } else if (this.isGoogleDocs) {
+      // In Google Docs, inserting text into the canvas is nontrivial.
+      // Here we simply log acceptance. Actual insertion would require simulating key events.
+      console.log("Accepting suggestion in Google Docs:", this.suggestion);
+    }
+    this.clearGhostOverlay();
+    this.suggestion = "";
+  }
+
+  clearGhostOverlay() {
+    if (this.ghostOverlay) {
+      this.ghostOverlay.remove();
+      this.ghostOverlay = null;
+    }
+  }
+
+  getTextFromElement(element) {
+    if (element.tagName === "INPUT" || element.tagName === "TEXTAREA") {
+      return element.value;
+    } else if (element.isContentEditable) {
+      return element.innerText;
+    }
+    return "";
+  }
+
+  // Validate common text editors
   isValidInput(element) {
-    // Check for various types of text input elements
     return (
-      // Regular inputs and textareas
-      ((element.tagName === "INPUT" &&
-        !element.type.match(/^(checkbox|radio|submit|button|file|hidden)$/)) ||
+      (element.tagName === "INPUT" ||
         element.tagName === "TEXTAREA" ||
-        // Rich text editors and contenteditable elements
-        element.getAttribute("contenteditable") === "true" ||
-        // Common rich text editor classes
-        element.classList.contains("ql-editor") || // Quill
-        element.classList.contains("ProseMirror") || // ProseMirror
+        element.isContentEditable ||
+        element.classList.contains("ProseMirror") ||
+        element.classList.contains("kix-canvas") || // Google Docs canvas
+        element.classList.contains("ql-editor") ||   // Quill Editor
         element.classList.contains("CodeMirror-code") || // CodeMirror
-        element.classList.contains("ace_editor") || // Ace Editor
-        element.classList.contains("monaco-editor") || // Monaco Editor
-        // Google Docs specific
-        element.classList.contains("kix-canvas") ||
-        // Generic editable elements
-        window.getComputedStyle(element).webkitUserModify === "read-write") &&
-      // Exclude password fields and readonly inputs
+        element.classList.contains("monaco-editor")) && // Monaco Editor
       !element.readOnly &&
       element.type !== "password"
     );
   }
 
-  async handleInput(element) {
-    let text, cursorPosition;
-
-    // Get text and cursor position based on element type
-    if (element.tagName === "INPUT" || element.tagName === "TEXTAREA") {
-      text = element.value;
-      cursorPosition = element.selectionStart;
-    } else if (element.getAttribute("contenteditable") === "true") {
-      text = element.textContent;
-      const selection = window.getSelection();
-      cursorPosition = selection.anchorOffset;
-    } else {
-      // For other editors, try to get text content
-      text = element.textContent || element.innerText;
-      const selection = window.getSelection();
-      cursorPosition = selection.anchorOffset;
-    }
-
-    const context = {
-      text: text,
-      cursorPosition: cursorPosition,
-      elementType: element.tagName.toLowerCase(),
-      inputType: element.type || "text",
-    };
-
-    try {
-      const suggestion = await this.model.getSuggestion(context);
-      if (suggestion) {
-        this.ghostText.show(element, suggestion);
-      } else {
-        this.ghostText.hide();
-      }
-    } catch (error) {
-      console.error("Autocomplete error:", error);
-      this.ghostText.hide();
-    }
+  // Compute caret coordinates for input/textarea using a mirror div
+  getCaretCoordinates(element, position) {
+    const div = document.createElement("div");
+    const style = window.getComputedStyle(element);
+    div.style.position = "absolute";
+    div.style.visibility = "hidden";
+    div.style.whiteSpace = "pre-wrap";
+    div.style.font = style.font;
+    div.style.padding = style.padding;
+    div.style.border = style.border;
+    div.style.overflow = "auto";
+    div.style.width = element.offsetWidth + "px";
+    div.textContent = element.value.substring(0, position);
+    document.body.appendChild(div);
+    const span = document.createElement("span");
+    span.textContent = element.value.substring(position) || ".";
+    div.appendChild(span);
+    const rect = span.getBoundingClientRect();
+    document.body.removeChild(div);
+    return rect;
   }
 
-  debounce(func, wait) {
-    let timeout;
-    return (...args) => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func.apply(this, args), wait);
-    };
+  // --- Google Docs Specific Handling ---
+  setupGoogleDocsListener() {
+    if (!this.isGoogleDocs) return;
+    console.log("Google Docs detected");
+    const observer = new MutationObserver(() => {
+      const canvas = document.querySelector(".kix-canvas-tile-content");
+      const cursor = document.querySelector(".kix-cursor");
+      if (canvas && cursor) {
+        console.log("Google Docs editor found");
+        observer.disconnect();
+        this.setupGoogleDocsHandlers();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  setupGoogleDocsHandlers() {
+    // Instead of an input event, poll for changes in the current line's text.
+    this.previousGoogleDocsText = "";
+    this.googleDocsInterval = setInterval(async () => {
+      const text = this.getGoogleDocsText();
+      if (text !== this.previousGoogleDocsText) {
+        this.previousGoogleDocsText = text;
+        if (!text.trim()) {
+          this.clearGhostOverlay();
+        } else {
+          const suggestion = await this.getSuggestion(text);
+          if (suggestion) {
+            this.suggestion = suggestion;
+            this.showGoogleDocsGhostOverlay(suggestion);
+          } else {
+            this.clearGhostOverlay();
+          }
+        }
+      }
+    }, 500);
+  }
+
+  getGoogleDocsText() {
+    const cursor = document.querySelector(".kix-cursor");
+    if (!cursor) return "";
+    const line = cursor.closest(".kix-lineview");
+    return line ? line.textContent : "";
   }
 }
 
-// Initialize
-new AutocompleteManager();
+new UniversalAutocomplete();
