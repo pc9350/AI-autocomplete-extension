@@ -14,5 +14,8 @@
     "typescript": "^5.7.3",
     "webpack": "^5.98.0",
     "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "@cerebras/cerebras_cloud_sdk": "^1.21.0"
   }
 }

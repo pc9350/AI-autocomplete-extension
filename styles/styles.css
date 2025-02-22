@@ -1,8 +1,8 @@
-.ai-ghost-text {
+ /*.ai-ghost-text {
     position: absolute;
     pointer-events: none;
-    color: #1a73e8;  /* Google blue color */
-    background: rgba(26, 115, 232, 0.1);  /* Light blue background */
+    color: #1a73e8;  
+    background: rgba(26, 115, 232, 0.1);  
     white-space: pre;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -13,11 +13,11 @@
     padding: 0 4px;
     border-radius: 2px;
     font-weight: 500;
-    height: 1.2em !important;  /* Force single line height */
-    min-height: fit-content;   /* Ensure it's not too small */
-    max-height: 1.5em;        /* Ensure it's not too tall */
-    margin-top: 1px;          /* Small adjustment for alignment */
-}
+    height: 1.2em !important;  
+    min-height: fit-content;   
+    max-height: 1.5em;        
+    margin-top: 1px;     
+} */
 
 /* A subtle animation when suggestion appears */
 @keyframes fadeIn {

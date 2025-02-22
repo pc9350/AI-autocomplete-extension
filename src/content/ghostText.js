@@ -48,7 +48,6 @@ class GhostText {
         currentText = preCaretRange.toString();
         cursorPosition = currentText.length;
       }
-    }
 
     // Create a hidden span to measure text width
     const measurer = document.createElement("span");
@@ -79,7 +78,8 @@ class GhostText {
       overflow: "hidden",
       textOverflow: "ellipsis",
       maxWidth: `${Math.max(200, rect.width - textWidth - 20)}px`,
-    });
+      });
+    }
 
     // Show suggestion
     this.overlay.textContent = suggestion;
