@@ -26,7 +26,7 @@ class UniversalAutocomplete {
     });
     document.addEventListener("keydown", (e) => this.handleKeydown(e));
   }
-
+  
   handleFocus(event) {
     const element = event.target;
     if (this.isValidInput(element)) {
@@ -69,7 +69,13 @@ class UniversalAutocomplete {
       console.error("Error getting suggestion:", error);
       this.clearGhostOverlay();
     }
+
+    // Retry with exponential backoff
+    setTimeout(() => {
+      this.waitForEditor(retries + 1, maxRetries);
+    }, Math.min(1000 * Math.pow(1.5, retries), 10000));
   }
+
 
   clearTimers() {
     if (this.inputTimer) {
@@ -131,6 +137,7 @@ class UniversalAutocomplete {
     }
 
     try {
+
       const context = {
         text: text,
         isSearchInput: this.isSearchInput(this.currentElement),
