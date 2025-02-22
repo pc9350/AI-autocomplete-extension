@@ -3,6 +3,9 @@ node_modules/
 package-lock.json
 yarn.lock
 
+# Config files
+src/config.js
+
 # Build outputs
 dist/
 build/
