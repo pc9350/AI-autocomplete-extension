@@ -73,9 +73,11 @@ ai-autocomplete-extension/
 ## Setup and Development
 
 1. Clone the repository
-2. Load as unpacked extension in Chrome
-3. Enable developer mode in Chrome extensions
-4. Test in different contexts
+2. Copy `src/config.example.js` to `src/config.js`
+3. Add your Cerebras API key to `config.js`
+4. Load as unpacked extension in Chrome
+5. Enable developer mode in Chrome extensions
+6. Test in different contexts
 
 ## Testing Priority Areas
 1. Google Docs integration
