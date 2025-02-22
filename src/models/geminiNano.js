@@ -21,7 +21,7 @@ class GeminiNano {
   }
 
   async getSuggestion(context) {
-    if (!this.model || context.text.length < 3) return null;
+    if (!this.model || !context.text || context.text.trim().length < 2) return null;
 
     try {
       if (this.currentRequest) {
@@ -30,7 +30,23 @@ class GeminiNano {
 
       this.currentRequest = new AbortController();
 
-      const prompt = `You are an advanced autocomplete assistant for both code and text. Analyze the input and provide appropriate continuations:
+      const isSearchQuery = context.elementType === 'search' || 
+                          context.isSearchInput;
+
+
+
+      const prompt = isSearchQuery ? 
+        `You are a search completion assistant. Complete this search query naturally:
+        - Suggest popular or logical search completions
+        - Keep it concise and relevant
+        - No explanations, just the completion
+        - Match the search intent
+        
+        QUERY: "${context.text}"
+        COMPLETION:` 
+        : 
+        
+      `You are an advanced autocomplete assistant for both code and text. Analyze the input and provide appropriate continuations:
 
       If the input is CODE (detect based on syntax, symbols, or common patterns):
       - Continue with valid syntax for that programming language
@@ -61,7 +77,8 @@ class GeminiNano {
       - Preserve formatting and style
       - For code, prioritize syntactic correctness
       - For markdown, maintain formatting
-          TEXT: "${context.text}"
+
+          INPUT: "${context.text}"
           CONTINUATION:`;
 
       const response = await Promise.race([
@@ -79,13 +96,9 @@ class GeminiNano {
       console.log("clean response", cleanResponse);
       return cleanResponse || null;
     } catch (error) {
-      if (error.message?.includes("untested language")) {
-        console.log("Skipping suggestion for potential non-English input");
-        return null;
-      }
-
-      // Log other errors
-      if (error.message !== "Timeout" && !error.message.includes("cancelled")) {
+      if (error.message === "Timeout" || error.name === "AbortError") {
+        console.log("Request cancelled or timed out");
+      } else {
         console.error("Error getting suggestion:", error);
       }
       return null;

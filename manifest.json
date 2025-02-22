@@ -14,7 +14,10 @@
     "content_scripts": [{
       "matches": ["<all_urls>"],
       "js": [
+        "src/config.js",
+        "src/models/cerebras-sdk.js",
         "src/utils/debounce.js",
+        "src/models/cerebras.js",
         "src/models/geminiNano.js",
         "src/content/ghostText.js",
         "src/content/content.js"

@@ -1,17 +1,29 @@
 class UniversalAutocomplete {
   constructor() {
-    this.model = new window.GeminiNano();
+    this.providers = {
+      gemini: new window.GeminiNano(),
+      cerebras: new window.Cerebras(),
+    };
+    this.currentProvider = "cerebras";
     this.suggestion = "";
     this.ghostOverlay = null;
     this.currentElement = null;
     this.setupListeners();
     this.setupGoogleDocsListener();
+    this.lastInputTime = 0;
+    this.inputDelay = 500;
     console.log("UniversalAutocomplete initialized");
   }
 
   setupListeners() {
     document.addEventListener("focusin", (e) => this.handleFocus(e));
-    document.addEventListener("input", (e) => this.handleInput(e));
+    // Use the debounced version of handleInput
+    document.addEventListener("input", (e) => {
+      clearTimeout(this.inputTimer);
+      this.inputTimer = setTimeout(() => {
+        this.handleInput(e);
+      }, this.inputDelay);
+    });
     document.addEventListener("keydown", (e) => this.handleKeydown(e));
   }
 
@@ -31,20 +43,47 @@ class UniversalAutocomplete {
     this.currentElement = element;
     const text = this.getTextFromElement(element);
 
-    if (!text.trim()) {
+    console.log("Current text content:", {
+      length: text.length,
+      preview: text.substring(0, 100)
+    });
+
+    if (!text || text.trim().length < 2) {
       this.clearGhostOverlay();
       return;
     }
 
-    const suggestion = await this.getSuggestion(text);
-    console.log("Got suggestion:", suggestion);
+    try {
+      this.failedAttempts = 0;
 
-    if (suggestion) {
-      this.suggestion = suggestion;
-      // Use the updated styling for the ghost overlay
-      this.showGhostOverlay(element, suggestion);
-    } else {
+      const suggestion = await this.getSuggestion(text);
+      console.log("Got suggestion for text:", text, "=>", suggestion);
+
+      if (suggestion && suggestion.trim()) {
+        this.suggestion = suggestion;
+        this.showGhostOverlay(element, suggestion);
+      } else {
+        this.clearGhostOverlay();
+      }
+    } catch (error) {
+      console.error("Error getting suggestion:", error);
       this.clearGhostOverlay();
+    }
+  }
+
+  clearTimers() {
+    if (this.inputTimer) {
+      clearTimeout(this.inputTimer);
+      this.inputTimer = null;
+    }
+  }
+
+  // Add cleanup to existing methods
+  clearGhostOverlay() {
+    this.clearTimers();
+    if (this.ghostOverlay) {
+      this.ghostOverlay.remove();
+      this.ghostOverlay = null;
     }
   }
 
@@ -64,16 +103,87 @@ class UniversalAutocomplete {
       this.acceptSuggestion(this.currentElement);
     } else if (event.key === "Escape") {
       this.clearGhostOverlay();
+    } else {
+      // Clear existing timer if user starts typing again
+      clearTimeout(this.inputTimer);
     }
   }
 
+  isSearchInput(element) {
+    if (!element) return false;
+
+    return (
+      element.getAttribute("type") === "search" || // Explicit search inputs
+      element.getAttribute("role") === "searchbox" || // ARIA search role
+      element.name === "q" || // Google search
+      element.name === "search_query" || // YouTube search
+      element.placeholder?.toLowerCase().includes("search") || // Search placeholder
+      element.classList.contains("search-input") || // Common search class
+      element.id?.toLowerCase().includes("search") // Search in ID
+    );
+  }
+
   async getSuggestion(text) {
+    const provider = this.providers[this.currentProvider];
+    if (!provider) {
+      console.error("Provider not found:", this.currentProvider);
+      return null;
+    }
+
     try {
-      const context = { text: text, cursorPosition: text.length };
-      const response = await this.model.getSuggestion(context);
-      return response || null;
+      const context = {
+        text: text,
+        isSearchInput: this.isSearchInput(this.currentElement),
+        elementType: this.currentElement?.tagName.toLowerCase(),
+      };
+
+      const result = await provider.getSuggestion(context);
+
+      // Only switch providers if we get null or empty result
+      if (result && result.trim()) {
+        this.failedAttempts = 0; // Reset on success
+        return result;
+      }
+
+      // If no result and haven't tried fallback yet
+      if (this.failedAttempts === 0) {
+        this.failedAttempts++;
+        const otherProvider =
+          this.currentProvider === "cerebras" ? "gemini" : "cerebras";
+        console.log(
+          `No result from ${this.currentProvider}, trying ${otherProvider}`
+        );
+        this.currentProvider = otherProvider;
+        return this.getSuggestion(text);
+      }
+
+      // If we've already tried both providers, give up
+      console.log("Both providers failed, giving up");
+      this.failedAttempts = 0; // Reset for next attempt
+      return null;
     } catch (error) {
-      console.error("Autocomplete error:", error);
+      console.error("Provider error:", error);
+
+      // Don't switch providers on network errors or timeouts
+      if (error.name === "AbortError" || error.message.includes("Timeout")) {
+        return null;
+      }
+
+      // For other errors, try fallback if we haven't already
+      if (this.failedAttempts === 0) {
+        this.failedAttempts++;
+        const otherProvider =
+          this.currentProvider === "cerebras" ? "gemini" : "cerebras";
+        console.log(
+          `Error with ${this.currentProvider}, trying ${otherProvider}`
+        );
+        this.currentProvider = otherProvider;
+        return this.getSuggestion(text);
+      }
+
+      // If we've already tried both providers, give up
+      console.log("Both providers failed, giving up");
+      this.failedAttempts = 0; // Reset for next attempt
       return null;
     }
   }
@@ -169,43 +279,98 @@ class UniversalAutocomplete {
     this.suggestion = "";
   }
 
-  clearGhostOverlay() {
-    if (this.ghostOverlay) {
-      this.ghostOverlay.remove();
-      this.ghostOverlay = null;
-    }
-  }
-
   getTextFromElement(element) {
-    if (element.tagName === "INPUT" || element.tagName === "TEXTAREA") {
-      return element.value;
+    // Handle Monaco editor
+    // if (
+    //   element.classList.contains("monaco-mouse-cursor-text") ||
+    //   element.closest(".monaco-editor")
+    // ) {
+    //   // Get the editor container
+    //   const editorContainer = element.closest(".monaco-editor");
+    //   if (!editorContainer) return "";
+
+    //   // Get all lines from the editor
+    //   const lines = Array.from(editorContainer.querySelectorAll(".view-line"))
+    //     .map((line) => {
+    //       // Remove any class names and style attributes from the text
+    //       return line.textContent.replace(/\u200B/g, "").trim(); // Remove zero-width spaces
+    //     })
+    //     .filter((line) => line.length > 0) // Remove empty lines
+    //     .join("\n");
+
+    //   console.log("Monaco editor content:", {
+    //     rawLines: lines,
+    //     lineCount: lines.split("\n").length,
+    //   });
+
+    //   return lines || "";
+    // }
+
+    // Regular input handling
+    if (
+      element.tagName.toLowerCase() === "input" ||
+      element.tagName.toLowerCase() === "textarea"
+    ) {
+      return element.value || "";
     } else if (element.isContentEditable) {
-      return element.innerText;
+      return element.innerText || "";
     }
     return "";
   }
 
   isValidInput(element) {
     const tagName = element.tagName.toLowerCase();
+
+    const isSearchInput = this.isSearchInput(element);
+
+    const isMonacoEditor = 
+      element.classList.contains('monaco-mouse-cursor-text') ||
+      element.closest('.monaco-editor') !== null;
+
+    if (isMonacoEditor) {
+      console.log("Monaco editor detected", {
+        element: element.tagName,
+        classes: Array.from(element.classList),
+        parentClasses: Array.from(element.parentElement?.classList || [])
+      });
+      return true;
+    }
+
+    // Minimum text length check to avoid unnecessary suggestions
+    const hasMinLength =
+      (element.value || element.textContent || "").trim().length >= 2;
+
     const isValid =
-      (tagName === "input" ||
+      // Regular inputs
+      ((tagName === "input" &&
+        !element.type.match(
+          /^(checkbox|radio|submit|button|file|hidden|password)$/
+        )) ||
         tagName === "textarea" ||
         element.isContentEditable ||
+        // Rich text editors
         element.classList.contains("ProseMirror") ||
-        element.classList.contains("kix-canvas") || // Google Docs
-        element.classList.contains("ql-editor") || // Quill
-        element.classList.contains("CodeMirror-code") || // CodeMirror
+        element.classList.contains("ql-editor") ||
+        element.classList.contains("CodeMirror-code") ||
         element.classList.contains("monaco-editor") ||
-        element.id === "textarea__editor") && // Specific to your project
+        element.id === "textarea__editor" ||
+        // Search inputs
+        isSearchInput) &&
       !element.readOnly &&
-      element.type !== "password";
+      hasMinLength;
 
+    // Debug log
     if (isValid) {
       console.log("Valid input detected:", {
-        tagName: tagName,
+        tagName,
         id: element.id,
+        type: element.type,
+        name: element.name,
+        placeholder: element.placeholder,
         classList: Array.from(element.classList),
         isContentEditable: element.isContentEditable,
+        isSearchInput,
+        hasMinLength,
       });
     }
     return isValid;
