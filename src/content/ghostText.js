@@ -23,63 +23,51 @@ class GhostText {
     // Get text and cursor position based on element type
     let currentText, cursorPosition;
 
-    if (
-      inputElement.tagName === "INPUT" ||
-      inputElement.tagName === "TEXTAREA"
-    ) {
+    if (inputElement.tagName === "INPUT" || inputElement.tagName === "TEXTAREA") {
       // Regular input elements
       currentText = inputElement.value.slice(0, inputElement.selectionStart);
       cursorPosition = inputElement.selectionStart;
     } else {
       // For contenteditable and rich text editors
       const selection = window.getSelection();
-
-      // Check if there's a valid selection
       if (!selection || !selection.rangeCount) {
         currentText = inputElement.textContent || "";
         cursorPosition = currentText.length;
       } else {
         const range = selection.getRangeAt(0);
-
-        // Get the text before cursor
         const preCaretRange = range.cloneRange();
         preCaretRange.selectNodeContents(inputElement);
         preCaretRange.setEnd(range.endContainer, range.endOffset);
         currentText = preCaretRange.toString();
         cursorPosition = currentText.length;
       }
-
-    // Create a hidden span to measure text width
+    }
+    
+    // Create a hidden span to measure text width (for all element types)
     const measurer = document.createElement("span");
-    measurer.style.visibility = "hidden";
-    measurer.style.position = "absolute";
-    measurer.style.fontSize = style.fontSize;
-    measurer.style.fontFamily = style.fontFamily;
-    measurer.style.padding = "0";
-    measurer.style.whiteSpace = "pre";
+    measurer.style.cssText = `
+      visibility: hidden;
+      position: absolute;
+      font: ${style.font};
+      padding: ${style.padding};
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      width: ${rect.width}px;
+      box-sizing: border-box;
+    `;
     measurer.textContent = currentText;
     document.body.appendChild(measurer);
-
+    
     const textWidth = measurer.offsetWidth;
     document.body.removeChild(measurer);
-
+    
     // Position the overlay to align with input text
     Object.assign(this.overlay.style, {
       left: `${rect.left + textWidth + parseInt(style.paddingLeft || 0)}px`,
-      top: `${rect.top + (rect.height - lineHeight) / 2}px`, // Center vertically
-      height: `${lineHeight}px`, // Use line height instead of full height
+      top: `${rect.top + (rect.height - lineHeight) / 2}px`,
       fontSize: style.fontSize,
-      fontFamily: style.fontFamily,
-      lineHeight: `${lineHeight}px`,
-      position: "absolute",
-      display: "block",
-      pointerEvents: "none",
-      whiteSpace: "pre",
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      maxWidth: `${Math.max(200, rect.width - textWidth - 20)}px`,
-      });
-    }
+      lineHeight: `${lineHeight}px`
+    });
 
     // Show suggestion
     this.overlay.textContent = suggestion;
@@ -87,11 +75,15 @@ class GhostText {
 
   hide() {
     if (this.overlay) {
-      this.overlay.style.display = "none";
+        this.overlay.style.opacity = '0';
+        setTimeout(() => {
+            this.overlay.style.display = 'none';
+            this.overlay.style.opacity = '0.85'; // Reset opacity for next show
+        }, 200); // Match transition duration
     }
     this.currentInput = null;
     this.suggestion = null;
-  }
+}
 
   accept() {
     if (!this.currentInput || !this.suggestion) return;
@@ -149,16 +141,8 @@ class GhostText {
       left: `${rect.right}px`,
       top: `${rect.top}px`,
       height: `${rect.height}px`,
-      position: "absolute",
-      display: "block",
-      pointerEvents: "none",
-      whiteSpace: "pre",
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      maxWidth: "200px",
-      fontSize: `${rect.height * 0.8}px`, // Approximate font size
-      lineHeight: `${rect.height}px`,
-    });
+      fontSize: `${rect.height * 0.8}px`
+  });
 
     this.suggestion = suggestion;
     this.overlay.textContent = suggestion;

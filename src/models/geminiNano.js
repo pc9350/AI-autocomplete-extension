@@ -62,7 +62,7 @@ class GeminiNano {
 
       If the input is NATURAL TEXT:
       - Continue naturally and contextually
-      - Keep it concise (7-9 words or 1-2 sentences)
+      - Keep it concise (4-5 words)
       - Match the tone and style of the input
       - If a sentence ends with period, start new sentence
       - If mid-sentence, continue the sentence structure
@@ -91,7 +91,11 @@ class GeminiNano {
       console.log("Raw response from model:", response);
 
       // Clean up the response to ensure it's a proper continuation
-      const cleanResponse = response?.trim()?.replace(/^["']|["']$/g, "");
+      const cleanResponse = response?.trim()
+        ?.replace(/^["'`]|["'`]$/g, "") // Remove quotes
+        ?.replace(/\\n/g, " ") // Replace newlines with spaces
+        ?.replace(/\s+/g, " ") // Normalize whitespace
+        ?.trim();
 
       console.log("clean response", cleanResponse);
       return cleanResponse || null;

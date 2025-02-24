@@ -5,13 +5,30 @@ class UniversalAutocomplete {
       cerebras: new window.Cerebras(),
     };
     this.currentProvider = "cerebras";
+    this.resizeObserver = new ResizeObserver(() => {
+      if (this.ghostOverlay && this.currentElement) {
+        this.showGhostOverlay(this.currentElement, this.currentSuggestion);
+      }
+    });
+    this.resizeObserver.observe(document.body);
     this.suggestion = "";
     this.ghostOverlay = null;
     this.currentElement = null;
     this.setupListeners();
     this.setupGoogleDocsListener();
     this.lastInputTime = 0;
-    this.inputDelay = 500;
+    this.lastRequestTime = {
+      cerebras: 0,
+      gemini: 0,
+    };
+    this.minRequestInterval = {
+      cerebras: 3000, // 2 seconds between Cerebras requests
+      gemini: 1000, // 0.5 seconds between Gemini requests
+    };
+    this.inputDelay = {
+      cerebras: 2000, // Wait 1.5 second before sending to Cerebras
+      gemini: 1500, // Wait 0.5 seconds before sending to Gemini
+    };
     console.log("UniversalAutocomplete initialized");
   }
 
@@ -22,11 +39,11 @@ class UniversalAutocomplete {
       clearTimeout(this.inputTimer);
       this.inputTimer = setTimeout(() => {
         this.handleInput(e);
-      }, this.inputDelay);
+      }, this.inputDelay[this.currentProvider]);
     });
     document.addEventListener("keydown", (e) => this.handleKeydown(e));
   }
-  
+
   handleFocus(event) {
     const element = event.target;
     if (this.isValidInput(element)) {
@@ -45,7 +62,7 @@ class UniversalAutocomplete {
 
     console.log("Current text content:", {
       length: text.length,
-      preview: text.substring(0, 100)
+      preview: text.substring(0, 100),
     });
 
     if (!text || text.trim().length < 2) {
@@ -71,11 +88,10 @@ class UniversalAutocomplete {
     }
 
     // Retry with exponential backoff
-    setTimeout(() => {
-      this.waitForEditor(retries + 1, maxRetries);
-    }, Math.min(1000 * Math.pow(1.5, retries), 10000));
+    // setTimeout(() => {
+    //   this.waitForEditor(retries + 1, maxRetries);
+    // }, Math.min(1000 * Math.pow(1.5, retries), 10000));
   }
-
 
   clearTimers() {
     if (this.inputTimer) {
@@ -130,13 +146,27 @@ class UniversalAutocomplete {
   }
 
   async getSuggestion(text) {
+    const now = Date.now();
+    
+    // Check which provider is available
+    const cerebrasCooldown = now - this.lastRequestTime.cerebras < this.minRequestInterval.cerebras;
+    const geminiCooldown = now - this.lastRequestTime.gemini < this.minRequestInterval.gemini;
+    
+    // Select provider based on cooldown
+    if (this.currentProvider === "cerebras" && cerebrasCooldown) {
+      this.currentProvider = "gemini";
+    } else if (this.currentProvider === "gemini" && geminiCooldown) {
+      this.currentProvider = "cerebras";
+    }
+
     const provider = this.providers[this.currentProvider];
     if (!provider) {
       console.error("Provider not found:", this.currentProvider);
       return null;
     }
-
+  
     try {
+      this.lastRequestTime[this.currentProvider] = now;
 
       const context = {
         text: text,
@@ -152,28 +182,24 @@ class UniversalAutocomplete {
         return result;
       }
 
-      // If no result and haven't tried fallback yet
-      if (this.failedAttempts === 0) {
-        this.failedAttempts++;
-        const otherProvider =
-          this.currentProvider === "cerebras" ? "gemini" : "cerebras";
-        console.log(
-          `No result from ${this.currentProvider}, trying ${otherProvider}`
-        );
+      const otherProvider = this.currentProvider === "cerebras" ? "gemini" : "cerebras";
+      const otherCooldown = now - this.lastRequestTime[otherProvider] < this.minRequestInterval[otherProvider];
+      
+      if (!otherCooldown) {
         this.currentProvider = otherProvider;
-        return this.getSuggestion(text);
+        this.lastRequestTime[this.currentProvider] = now;
+        return this.providers[otherProvider].getSuggestion(context);
       }
-
-      // If we've already tried both providers, give up
-      console.log("Both providers failed, giving up");
-      this.failedAttempts = 0; // Reset for next attempt
+      
       return null;
     } catch (error) {
-      console.error("Provider error:", error);
+      console.error(`${this.currentProvider} error:`, error);
 
       // Don't switch providers on network errors or timeouts
-      if (error.name === "AbortError" || error.message.includes("Timeout")) {
-        return null;
+      if (error.message.includes("422")) {
+        this.lastRequestTime[this.currentProvider] = Date.now();  // Update last request time
+        this.minRequestInterval[this.currentProvider] *= 1.5;     // Increase delay
+        console.log(`Increased ${this.currentProvider} delay to ${this.minRequestInterval[this.currentProvider]}ms`);
       }
 
       // For other errors, try fallback if we haven't already
@@ -195,67 +221,105 @@ class UniversalAutocomplete {
     }
   }
 
-  // This method creates an overlay with styling similar to GhostText.js.
-  // It positions the overlay at the end of the current text (i.e. after the caret).
   showGhostOverlay(element, suggestion) {
+    this.currentElement = element;
+    this.currentSuggestion = suggestion;
     this.clearGhostOverlay();
+
     const overlay = document.createElement("div");
     overlay.textContent = suggestion;
-    overlay.style.position = "absolute";
-    overlay.style.display = "block";
-    overlay.style.pointerEvents = "none";
-    overlay.style.zIndex = "1000";
-    overlay.style.whiteSpace = "pre";
-    overlay.style.overflow = "hidden";
-    overlay.style.textOverflow = "ellipsis";
-    // Ghost styling: gray, italic text.
-    overlay.style.color = "gray";
-    overlay.style.opacity = "0.6";
-    overlay.style.fontStyle = "italic";
+    overlay.className = "ai-ghost-text";
 
-    let caretRect = null;
+    const elementRect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+
     if (element.tagName === "INPUT" || element.tagName === "TEXTAREA") {
-      // Get the text before the cursor
       const textBeforeCursor = element.value.substring(
         0,
         element.selectionStart
       );
-      const style = window.getComputedStyle(element);
-      // Use padding values directly for better alignment with the text
       const paddingTop = parseInt(style.paddingTop) || 0;
       const paddingLeft = parseInt(style.paddingLeft) || 0;
-      const textWidth = this.measureTextWidth(textBeforeCursor, element);
-      const rect = element.getBoundingClientRect();
-      // Position at the same line: start at element's top plus paddingTop, and left offset by paddingLeft + textWidth.
-      caretRect = {
-        top: rect.top + paddingTop,
-        left: rect.left + paddingLeft + textWidth,
-      };
-      // Apply font styles so the overlay matches the input exactly
-      overlay.style.fontSize = style.fontSize;
-      overlay.style.fontFamily = style.fontFamily;
-      overlay.style.lineHeight = style.lineHeight;
+      const paddingRight = parseInt(style.paddingRight) || 0;
+
+      // Get explicit line height or calculate from font size
+      const fontSize = parseInt(style.fontSize) || 16;
+      const computedLineHeight =
+        parseInt(style.lineHeight) || Math.floor(fontSize * 1.2);
+
+      // Available width for text
+      const availableWidth = elementRect.width - paddingLeft - paddingRight;
+
+      // Use canvas for precise text measurement
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      ctx.font = style.font;
+
+      // Measure text width
+      const textWidth = ctx.measureText(textBeforeCursor).width;
+
+      // Calculate number of complete lines and remaining width
+      const completeLines = Math.floor(textWidth / availableWidth);
+      const remainingWidth = textWidth % availableWidth;
+
+      console.log("Canvas Measurements:", {
+        text: textBeforeCursor,
+        measurements: {
+          fontSize,
+          computedLineHeight,
+          availableWidth,
+          textWidth,
+          completeLines,
+          remainingWidth,
+        },
+      });
+
+      // Calculate final positions
+      const suggestedLeft =
+        elementRect.left + paddingLeft + remainingWidth + window.scrollX;
+      const suggestedTop =
+        elementRect.top +
+        paddingTop +
+        completeLines * computedLineHeight +
+        window.scrollY;
+
+      // Position the overlay
+      Object.assign(overlay.style, {
+        top: `${suggestedTop}px`,
+        left: `${suggestedLeft}px`,
+        maxWidth: `${availableWidth - remainingWidth}px`,
+        fontSize: `${fontSize}px`,
+        lineHeight: `${computedLineHeight}px`,
+      });
     } else if (element.isContentEditable) {
-      // For contenteditable elements, use the current selection's range.
-      const sel = window.getSelection();
-      if (sel.rangeCount > 0) {
-        const range = sel.getRangeAt(0).cloneRange();
+      const selection = window.getSelection();
+      if (selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0).cloneRange();
         range.collapse(true);
-        caretRect = range.getBoundingClientRect();
+        const rangeRect = range.getBoundingClientRect();
+
+        // Calculate available width for contenteditable
+        const availableWidth = elementRect.right - rangeRect.left - 20;
+
+        Object.assign(overlay.style, {
+          top: `${rangeRect.top + window.scrollY}px`,
+          left: `${rangeRect.left + window.scrollX}px`,
+          maxWidth: `${Math.max(50, availableWidth)}px`,
+          fontSize: style.fontSize,
+          lineHeight: style.lineHeight,
+        });
       }
     }
 
-    if (caretRect) {
-      overlay.style.top = `${caretRect.top + window.scrollY}px`;
-      overlay.style.left = `${caretRect.left + window.scrollX}px`;
-    }
     document.body.appendChild(overlay);
     this.ghostOverlay = overlay;
+  }
 
-    console.log("Ghost overlay created:", {
-      suggestion,
-      position: { top: overlay.style.top, left: overlay.style.left },
-    });
+  destroy() {
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+    }
+    this.clearGhostOverlay();
   }
 
   // When the user presses Tab, accept the suggestion.
@@ -330,15 +394,15 @@ class UniversalAutocomplete {
 
     const isSearchInput = this.isSearchInput(element);
 
-    const isMonacoEditor = 
-      element.classList.contains('monaco-mouse-cursor-text') ||
-      element.closest('.monaco-editor') !== null;
+    const isMonacoEditor =
+      element.classList.contains("monaco-mouse-cursor-text") ||
+      element.closest(".monaco-editor") !== null;
 
     if (isMonacoEditor) {
       console.log("Monaco editor detected", {
         element: element.tagName,
         classes: Array.from(element.classList),
-        parentClasses: Array.from(element.parentElement?.classList || [])
+        parentClasses: Array.from(element.parentElement?.classList || []),
       });
       return true;
     }
@@ -450,4 +514,9 @@ class UniversalAutocomplete {
 }
 
 // Initialize
-new UniversalAutocomplete();
+const autocomplete = new UniversalAutocomplete();
+
+// Clean up when extension is disabled/unloaded
+window.addEventListener("unload", () => {
+  autocomplete.destroy();
+});

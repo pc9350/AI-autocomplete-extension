@@ -1,24 +1,27 @@
- /*.ai-ghost-text {
-    position: absolute;
+.ai-ghost-text {
+    position: fixed;
+    display: inline-block;
     pointer-events: none;
-    color: #1a73e8;  
-    background: rgba(26, 115, 232, 0.1);  
-    white-space: pre;
+    z-index: 1000;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
     overflow: hidden;
     text-overflow: ellipsis;
-    z-index: 99999;
-    opacity: 1;
-    border: none;
-    outline: none;
-    padding: 0 4px;
+    color: #666;
+    opacity: 0.85;
+    font-style: italic;
+    text-shadow: 0 0 1px rgba(0,0,0,0.1);
+    background-color: rgba(255,255,255,0.8);
     border-radius: 2px;
-    font-weight: 500;
-    height: 1.2em !important;  
-    min-height: fit-content;   
-    max-height: 1.5em;        
-    margin-top: 1px;     
-} */
-
+    padding: 0 2px;
+    box-sizing: border-box;
+    min-width: 20px;
+    font-family: inherit; 
+    transition: opacity 0.2s ease; 
+    max-width: 100%;
+    width: auto;
+}
 /* A subtle animation when suggestion appears */
 @keyframes fadeIn {
     from { opacity: 0; transform: translateX(-2px); }
