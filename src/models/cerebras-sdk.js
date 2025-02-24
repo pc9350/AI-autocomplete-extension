@@ -5,7 +5,7 @@
         this.baseUrl = 'https://api.cerebras.ai/v1';
       }
   
-      async completions({ prompt, model, max_tokens = 50, temperature = 0.3, stop = [], stream = false }, { signal } = {}) {
+      async completions({ prompt, model, max_tokens = 50, temperature = 0.7, stop = [], stream = false }, { signal } = {}) {
         try {
           const response = await fetch(`${this.baseUrl}/completions`, {
             method: 'POST',

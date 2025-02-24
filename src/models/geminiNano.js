@@ -2,7 +2,30 @@ class GeminiNano {
   constructor() {
     this.model = null;
     this.currentRequest = null;
+    this.maxInputLength = 100;  // Reduced from default
+    this.contextWindow = 75;
     this.initModel();
+  }
+
+  getRelevantContext(text) {
+    // Get last few complete sentences
+    const sentences = text.split(/[.!?]+\s+/);
+    let context = '';
+    let length = 0;
+    
+    for (let i = sentences.length - 1; i >= 0; i--) {
+      const sentence = sentences[i].trim();
+      if (length + sentence.length > this.contextWindow) break;
+      context = sentence + '. ' + context;
+      length += sentence.length;
+    }
+    
+    // If no sentences, take last N chars
+    if (!context) {
+      context = text.slice(-this.contextWindow);
+    }
+    
+    return context.trim();
   }
 
   async initModel() {
@@ -32,7 +55,7 @@ class GeminiNano {
 
       const isSearchQuery = context.elementType === 'search' || 
                           context.isSearchInput;
-
+      const relevantContext = this.getRelevantContext(context.text);
 
 
       const prompt = isSearchQuery ? 
@@ -78,7 +101,7 @@ class GeminiNano {
       - For code, prioritize syntactic correctness
       - For markdown, maintain formatting
 
-          INPUT: "${context.text}"
+          INPUT: "${relevantContext}"
           CONTINUATION:`;
 
       const response = await Promise.race([
@@ -90,11 +113,11 @@ class GeminiNano {
 
       console.log("Raw response from model:", response);
 
-      // Clean up the response to ensure it's a proper continuation
+      // Clean up the response 
       const cleanResponse = response?.trim()
-        ?.replace(/^["'`]|["'`]$/g, "") // Remove quotes
-        ?.replace(/\\n/g, " ") // Replace newlines with spaces
-        ?.replace(/\s+/g, " ") // Normalize whitespace
+        ?.replace(/^["'`]|["'`]$/g, "") 
+        ?.replace(/\\n/g, " ") 
+        ?.replace(/\s+/g, " ") 
         ?.trim();
 
       console.log("clean response", cleanResponse);

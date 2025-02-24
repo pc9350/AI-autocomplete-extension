@@ -3,8 +3,8 @@ class Cerebras {
     this.model = "llama3.1-8b";
     this.currentRequest = null;
     this.client = null;
-    this.maxInputLength = 500;
-    this.contextWindow = 100;
+    this.maxInputLength = 100;
+    this.contextWindow = 75;
     this.initModel();
   }
 
@@ -50,13 +50,15 @@ class Cerebras {
 
       this.currentRequest = new AbortController();
 
+      const text = context.text.trim().slice(-this.contextWindow);
+
       const completion = await this.client.completions(
         {
-          prompt: this.constructPrompt(context),
+          prompt: text,
           model: this.model,
-          max_tokens: 50,
+          max_tokens: 30,
           temperature: 0.7,
-          stop: ["\n\n", ".", "!", "?", "[", "{", "<"],
+          stop: ["\n", ".", "!", "?"],
           stream: false,
         },
         {
@@ -66,20 +68,15 @@ class Cerebras {
 
       console.log("Response time:", completion.time_info.total_time);
 
-      const suggestion = completion.choices[0].text.trim();
+      let suggestion = completion.choices[0].text.trim();
       console.log("Cerebras raw response:", suggestion);
 
-      suggestion = this.cleanTemplateText(suggestion);
-
-      if (
-        suggestion.includes("[") ||
-        suggestion.includes("{") ||
-        suggestion.includes("<") ||
-        suggestion.includes("placeholder")
-      ) {
-        console.log("Rejected template-like response:", suggestion);
-        return null;
-      }
+      // Clean up any template patterns
+      suggestion = suggestion
+        .replace(/\[[^\]]+\]/g, "")
+        .replace(/\{[^\}]+\}/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
 
       console.log("Cerebras clean response:", suggestion);
 
