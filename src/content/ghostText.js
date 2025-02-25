@@ -13,14 +13,13 @@ class GhostText {
     this.currentInput = inputElement;
     this.suggestion = suggestion;
 
-    // Get position and styling from the input element
     const rect = inputElement.getBoundingClientRect();
     const style = window.getComputedStyle(inputElement);
 
     const lineHeight =
       parseInt(style.lineHeight) || parseInt(style.fontSize) * 1.2;
 
-    // Get text and cursor position based on element type
+
     let currentText, cursorPosition;
 
     if (inputElement.tagName === "INPUT" || inputElement.tagName === "TEXTAREA") {
@@ -43,7 +42,7 @@ class GhostText {
       }
     }
     
-    // Create a hidden span to measure text width (for all element types)
+    // hidden span to measure text width (for all element types)
     const measurer = document.createElement("span");
     measurer.style.cssText = `
       visibility: hidden;
@@ -61,7 +60,7 @@ class GhostText {
     const textWidth = measurer.offsetWidth;
     document.body.removeChild(measurer);
     
-    // Position the overlay to align with input text
+ 
     Object.assign(this.overlay.style, {
       left: `${rect.left + textWidth + parseInt(style.paddingLeft || 0)}px`,
       top: `${rect.top + (rect.height - lineHeight) / 2}px`,
@@ -78,8 +77,8 @@ class GhostText {
         this.overlay.style.opacity = '0';
         setTimeout(() => {
             this.overlay.style.display = 'none';
-            this.overlay.style.opacity = '0.85'; // Reset opacity for next show
-        }, 200); // Match transition duration
+            this.overlay.style.opacity = '0.85'; 
+        }, 200); 
     }
     this.currentInput = null;
     this.suggestion = null;
@@ -92,26 +91,26 @@ class GhostText {
       this.currentInput.tagName === "INPUT" ||
       this.currentInput.tagName === "TEXTAREA"
     ) {
-      // Regular input elements
+      
       const cursorPos = this.currentInput.selectionStart;
       this.currentInput.value =
         this.currentInput.value.slice(0, cursorPos) +
         this.suggestion +
         this.currentInput.value.slice(cursorPos);
 
-      // Move cursor to end of inserted text
+      
       const newPos = cursorPos + this.suggestion.length;
       this.currentInput.setSelectionRange(newPos, newPos);
     } else {
-      // Rich text editors and contenteditable
+      
       const selection = window.getSelection();
       const range = selection.getRangeAt(0);
 
-      // Insert the suggestion text
+      
       const textNode = document.createTextNode(this.suggestion);
       range.insertNode(textNode);
 
-      // Move cursor to end of inserted text
+      
       range.setStartAfter(textNode);
       range.setEndAfter(textNode);
       selection.removeAllRanges();

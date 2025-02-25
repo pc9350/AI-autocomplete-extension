@@ -2,7 +2,7 @@ class GeminiNano {
   constructor() {
     this.model = null;
     this.currentRequest = null;
-    this.maxInputLength = 100;  // Reduced from default
+    this.maxInputLength = 100;  
     this.contextWindow = 75;
     this.initModel();
   }

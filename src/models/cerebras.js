@@ -29,7 +29,6 @@ class Cerebras {
       length += lines[i].length;
     }
 
-    // If no line breaks, just take last N chars
     if (!context) {
       context = text.slice(-this.contextWindow);
     }
@@ -71,7 +70,7 @@ class Cerebras {
       let suggestion = completion.choices[0].text.trim();
       console.log("Cerebras raw response:", suggestion);
 
-      // Clean up any template patterns
+      
       suggestion = suggestion
         .replace(/\[[^\]]+\]/g, "")
         .replace(/\{[^\}]+\}/g, "")

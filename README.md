@@ -21,6 +21,7 @@ A Chrome extension that provides real-time AI-powered text suggestions using Gem
 
 ## Project Structure
 
+```
 ai-autocomplete-extension/
 ├── manifest.json
 ├── src/
@@ -28,12 +29,10 @@ ai-autocomplete-extension/
 │ │ ├── content.js # Main content script handling input detection
 │ │ └── ghostText.js # UI component for showing suggestions
 │ ├── models/
-│ │ └── geminiNano.js # AI model integration
-│ └── utils/
-│ └── debounce.js # Utility functions
+│    └── geminiNano.js # AI model integration
 └── styles/
 └── styles.css # Ghost text styling
-
+```
 
 
 ## Known Issues & TODOs
